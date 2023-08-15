@@ -112,7 +112,7 @@ func (s *taskServiceServer) ListTasks(request *pb.ListTasksRequest, stream pb.Ta
 	query := `
 		SELECT * FROM tasks WHERE user_id=$1 AND deadline < $2;
 	`
-	rows, err := db.Query(query, request.UserId, request.Deadline)
+	rows, err := db.Query(query, request.UserId, request.Deadline.AsTime())
 	if err != nil {
 		return err
 	}
