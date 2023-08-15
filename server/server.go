@@ -8,6 +8,7 @@ import (
 	pb "go-grpc-demo/src/go"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"io"
 	"log"
 	"net"
 	"strconv"
@@ -46,7 +47,7 @@ type taskServiceServer struct {
 	pb.UnimplementedTaskServiceServer
 }
 
-func (s *taskServiceServer) CreateTask(ctx context.Context, request *pb.CreateTaskRequest) (*pb.Task, error) {
+func createTaskFromRequest(request *pb.CreateTaskRequest) (*pb.Task, error) {
 	var task = &pb.Task{
 		Description: request.Description,
 		UserId:      request.UserId,
@@ -68,6 +69,9 @@ func (s *taskServiceServer) CreateTask(ctx context.Context, request *pb.CreateTa
 
 	task.Id = strconv.Itoa(taskId)
 	return task, nil
+}
+func (s *taskServiceServer) CreateTask(ctx context.Context, request *pb.CreateTaskRequest) (*pb.Task, error) {
+	return createTaskFromRequest(request)
 }
 
 func (s *taskServiceServer) GetTask(ctx context.Context, request *pb.GetTaskRequest) (*pb.Task, error) {
@@ -102,6 +106,107 @@ func (s *taskServiceServer) GetTask(ctx context.Context, request *pb.GetTaskRequ
 		CreatedAt:   timestamppb.New(createdAtTime),
 	}
 	return task, nil
+}
+
+func (s *taskServiceServer) ListTasks(request *pb.ListTasksRequest, stream pb.TaskService_ListTasksServer) error {
+	query := `
+		SELECT * FROM tasks WHERE user_id=$1 AND deadline < $2;
+	`
+	rows, err := db.Query(query, request.UserId, request.Deadline)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var (
+			id          int
+			description string
+			user_id     int
+			status      string
+			deadline    string
+			created_at  string
+		)
+		err = rows.Scan(&id, &description, &user_id, &status, &deadline, &created_at)
+		if err != nil {
+			return err
+		}
+
+		deadlineTime, err := time.Parse(time.RFC3339, deadline)
+		if err != nil {
+			log.Fatalf("Error: Invalid time for deadline: %v", err)
+		}
+		createdAtTime, err := time.Parse(time.RFC3339, created_at)
+		if err != nil {
+			log.Fatalf("Error: Invalid time for created_at: %v", err)
+		}
+		task := &pb.Task{
+			Id:          strconv.Itoa(id),
+			Description: description,
+			UserId:      strconv.Itoa(user_id),
+			Status:      pb.TaskStatus(pb.TaskStatus_value[status]),
+			Deadline:    timestamppb.New(deadlineTime),
+			CreatedAt:   timestamppb.New(createdAtTime),
+		}
+		err = stream.Send(task)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *taskServiceServer) RecordTasks(stream pb.TaskService_RecordTasksServer) error {
+	var createTaskRequest *pb.CreateTaskRequest
+	var err error
+	count := 0
+	for {
+		createTaskRequest, err = stream.Recv()
+		if err == io.EOF {
+			return stream.SendAndClose(&pb.TaskSummary{
+				NoOfTasksCreated: strconv.Itoa(count),
+			})
+		}
+		if err != nil {
+			return err
+		}
+		_, err := createTaskFromRequest(createTaskRequest)
+		if err != nil {
+			return err
+		}
+		count++
+	}
+}
+
+func (s *taskServiceServer) TaskChat(stream pb.TaskService_TaskChatServer) error {
+	for {
+		in, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+
+		taskId := in.TaskId
+		userId := in.UserId
+		comment := in.Comment
+
+		insertStmt := `INSERT INTO comments("task_id", "user_id", "comment") VALUES($1, $2, $3)`
+		_, err = db.Exec(insertStmt, taskId, userId, comment)
+		if err != nil {
+			return err
+		}
+
+		taskComment := &pb.TaskComment{
+			TaskId:    taskId,
+			UserId:    userId,
+			Comment:   comment,
+			CreatedAt: timestamppb.Now(),
+		}
+
+		if err := stream.Send(taskComment); err != nil {
+			return err
+		}
+	}
 }
 
 func main() {
