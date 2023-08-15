@@ -13,6 +13,8 @@ import (
 	"time"
 )
 
+var createdTasks []string
+
 func createTask(client pb.TaskServiceClient, createTaskRequest *pb.CreateTaskRequest) {
 	log.Printf("Creating Task: { description: '%s', user_id: '%s', deadline: '%s' }", createTaskRequest.Description, createTaskRequest.UserId, createTaskRequest.Deadline)
 
@@ -20,6 +22,7 @@ func createTask(client pb.TaskServiceClient, createTaskRequest *pb.CreateTaskReq
 
 	if err == nil {
 		log.Println(createdTask)
+		createdTasks = append(createdTasks, createdTask.Id)
 	}
 }
 
@@ -97,13 +100,13 @@ func listTasks(client pb.TaskServiceClient, userId string, deadline string) {
 
 func runTaskChat(client pb.TaskServiceClient) {
 	comments := []*pb.TaskComment{
-		{UserId: "1", TaskId: "1", CreatedAt: timestamppb.Now()},
-		{UserId: "2", TaskId: "1", CreatedAt: timestamppb.Now()},
-		{UserId: "1", TaskId: "1", CreatedAt: timestamppb.Now()},
-		{UserId: "1", TaskId: "1", CreatedAt: timestamppb.Now()},
-		{UserId: "3", TaskId: "1", CreatedAt: timestamppb.Now()},
-		{UserId: "2", TaskId: "1", CreatedAt: timestamppb.Now()},
-		{UserId: "3", TaskId: "1", CreatedAt: timestamppb.Now()},
+		{UserId: "1", TaskId: createdTasks[0], Comment: "Comment 1", CreatedAt: timestamppb.Now()},
+		{UserId: "2", TaskId: createdTasks[0], Comment: "Comment 2", CreatedAt: timestamppb.Now()},
+		{UserId: "1", TaskId: createdTasks[0], Comment: "Comment 3", CreatedAt: timestamppb.Now()},
+		{UserId: "1", TaskId: createdTasks[0], Comment: "Comment 4", CreatedAt: timestamppb.Now()},
+		{UserId: "3", TaskId: createdTasks[0], Comment: "Comment 5", CreatedAt: timestamppb.Now()},
+		{UserId: "2", TaskId: createdTasks[0], Comment: "Comment 6", CreatedAt: timestamppb.Now()},
+		{UserId: "3", TaskId: createdTasks[0], Comment: "Comment 7", CreatedAt: timestamppb.Now()},
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -163,7 +166,7 @@ func main() {
 	})
 
 	log.Printf("==== Calling GetTask ====")
-	getTask(client, &pb.GetTaskRequest{TaskId: "1"})
+	getTask(client, &pb.GetTaskRequest{TaskId: createdTasks[0]})
 
 	log.Printf("==== Calling RecordTasks ====")
 	runRecordTasks(client)
