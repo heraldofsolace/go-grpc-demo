@@ -26,9 +26,9 @@ func createTask(client pb.TaskServiceClient, createTaskRequest *pb.CreateTaskReq
 	}
 }
 
-func getTask(client pb.TaskServiceClient, geTaskRequest *pb.GetTaskRequest) {
+func getTask(client pb.TaskServiceClient, getTaskRequest *pb.GetTaskRequest) {
 
-	task, err := client.GetTask(context.Background(), geTaskRequest)
+	task, err := client.GetTask(context.Background(), getTaskRequest)
 
 	if err == nil {
 		log.Println(task)
